@@ -1,0 +1,66 @@
+[package]
+name = "webhttp"
+version = "0.1.0"
+edition = "2021"
+authors = ["asbezier <asbezier@outlook.com>"]
+publish = true
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/OpenBezier/webhttp"
+description = "webhttp"
+
+[dependencies]
+thiserror = "1.0.44"
+anyhow = "1.0.72"
+tracing = "0.1.37"
+env_logger = "0.10.0"
+clap = { version = "4.3.19", features = ["derive"] }
+tracing-appender = { version = "0.2.2" }
+tracing-subscriber = { version = "0.3.17", features = [
+    "env-filter",
+    "time",
+    "local-time",
+] }
+actix = "0.13.0"
+actix-rt = "2.8.0"
+actix-web = "4.4.0"
+actix-cors = "0.6.4"
+actix-web-actors = "4.2.0"
+actix-web-prom = "^0.7.0"
+actix-settings = "0.7.1"
+actix-http = "3.6.0"
+
+prometheus = "0.13.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dashmap = "5.5"
+time = { version = "0.3.23", features = ["macros"] }
+crossbeam = "0.8.2"
+rand = "0.8.5"
+async-trait = "0.1.72"
+futures = "0.3.28"
+lazy_static = "1.4.0"
+tokio = { version = "1.33.0", features = ["full"] }
+uuid = { version = "1.4.1", features = ["v4", "fast-rng", "macro-diagnostics"] }
+jsonwebtoken = "8.3.0"
+directories = "5.0.1"
+
+reqwest = { version = "0.11", default-features = false, features = [
+    "multipart",
+    "json",
+    "rustls-tls",
+] }
+
+# only used by ws_server example
+# dyn-clone = "1.0.12"
+# derive_more = "0.99.17"
+# rmp-serde = "1.1.2"
+sea-orm = { version = "0.12.15", features = [
+    "sqlx-mysql",
+    "runtime-tokio-rustls",
+] }
+fred = "8.0.6"
+webproto = "0.1.0"
+
+[features]
+default = []
+
