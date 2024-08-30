@@ -41,13 +41,13 @@ use time::macros::offset;
 use tracing::*;
 
 #[allow(clippy::unused_async)]
-#[cfg_attr(coverage, no_coverage)]
+// #[cfg_attr(coverage, no_coverage)]
 pub async fn not_found() -> HttpResponse {
     HttpResponse::NotFound().body("Not Found 404")
 }
 
 #[allow(clippy::unused_async)]
-#[cfg_attr(coverage, no_coverage)]
+// #[cfg_attr(coverage, no_coverage)]
 pub async fn health_check() -> HttpResponse {
     let now = time::OffsetDateTime::now_utc().to_offset(offset!(+8));
     let return_info = format!("running: {:?}", now,);
@@ -97,6 +97,7 @@ pub async fn start(
     redis: Option<fred::prelude::RedisPool>,                            // redis connector
     token_check: Option<Arc<dyn crate::access_token::TokenPermission + Send + Sync>>, // permissison
     jwt_secret: Option<String>,                                         // jwt secret
+    api_prefix: Option<String>, // api prefix url, such as /api/v1/test
 ) -> anyhow::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
@@ -150,7 +151,7 @@ pub async fn start(
         token_check: token_check,
         jwt_secret: jwt_secret,
     };
-    start_internal(state, name, port, api_init, thread_num).await?;
+    start_internal(state, name, port, api_init, thread_num, api_prefix).await?;
     anyhow::Ok(())
 }
 
@@ -160,9 +161,19 @@ async fn start_internal(
     port: u16,
     api_init: impl Fn(&mut web::ServiceConfig) + Sync + Send + 'static,
     thread_num: Option<usize>,
+    api_prefix: Option<String>,
 ) -> anyhow::Result<()> {
+    let mut api_prefix = if api_prefix.is_some() {
+        api_prefix.unwrap().clone()
+    } else {
+        "/".into()
+    };
+    if !api_prefix.ends_with("/") {
+        api_prefix = format!("{}/", api_prefix);
+    }
+
     let metrics = actix_web_prom::PrometheusMetricsBuilder::new(&name)
-        .endpoint("/metrics")
+        .endpoint(format!("{}metrics", api_prefix).as_str())
         .build()
         .unwrap();
     let found_errors = prometheus::IntCounterVec::new(
@@ -208,8 +219,15 @@ async fn start_internal(
             .app_data(payload_config.clone())
             .app_data(json_payload_config.clone())
             .app_data(web::Data::new(state.clone()))
-            .route("/health", web::get().to(health_check))
-            .configure(init_service(state.clone(), api_init.clone()))
+            .route(
+                format!("{}health", api_prefix).as_str(),
+                web::get().to(health_check),
+            )
+            .configure(init_service(
+                state.clone(),
+                api_init.clone(),
+                api_prefix.clone(),
+            ))
             .wrap(cors)
             // not use middlewar of logger, because the format is not same as tracing
             // .wrap(Logger::new("%a %r[%t]-%s %T %b"))
@@ -294,19 +312,30 @@ async fn start_internal(
 fn init_service(
     state: AppState,
     api_init: Arc<impl Fn(&mut web::ServiceConfig) + Send + Sync>,
+    api_prefix: String,
 ) -> impl Fn(&mut web::ServiceConfig) {
     move |web_app| {
         if state.consumer.is_some() {
             // info!("http and websocket mode");
-            if state.wsapi.is_some() && !state.wsapi.as_ref().unwrap().is_empty() {
-                let ws_api_url = state.wsapi.as_ref().unwrap();
-                info!("register ws api service as: {}", ws_api_url);
-                web_app.service(web::scope(ws_api_url).service(websocket::api::ws_api()));
-            } else {
-                let ws_api_url = "/websocket/api";
-                info!("register ws api service as default: {}", ws_api_url);
-                web_app.service(web::scope(ws_api_url).service(websocket::api::ws_api()));
+            let mut ws_api_url =
+                if state.wsapi.is_some() && !state.wsapi.as_ref().unwrap().is_empty() {
+                    let ws_api_url = state.wsapi.as_ref().unwrap();
+                    info!("register ws api service as: {}", ws_api_url);
+                    ws_api_url
+                } else {
+                    let ws_api_url = "websocket/api";
+                    info!("register ws api service as default: {}", ws_api_url);
+                    ws_api_url
+                };
+
+            if ws_api_url.starts_with("/") {
+                ws_api_url = ws_api_url.strip_prefix("/").unwrap();
             }
+
+            web_app.service(
+                web::scope(format!("{}{}", api_prefix, ws_api_url).as_str())
+                    .service(websocket::api::ws_api()),
+            );
             state.consumer.as_ref().unwrap().api_init(web_app);
             return;
         }
