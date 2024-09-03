@@ -302,7 +302,9 @@ async fn start_internal(
     })
     // .keep_alive(std::time::Duration::from_secs(75))
     // .keep_alive(KeepAlive::Os)
-    .apply_settings(&settings)
+    .try_apply_settings(&settings)
+    .unwrap()
+    // .apply_settings(&settings)
     // .bind(("0.0.0.0", port))? // if use settings, it already has binding addr, can't add again
     .run()
     .await?;
